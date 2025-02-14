@@ -37,59 +37,79 @@
         const gridHelper = new THREE.GridHelper(100, 100);
         scene.add(gridHelper);
 
+       
 
 
-       // 创建起伏的网格平面
-const planeSize = 100; // 平面大小
-const planeSegments = 100; // 平面的分段数（控制起伏的精细度）
-const planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize, planeSegments, planeSegments);
 
-// 为每个顶点设置随机高度和颜色
-const positionAttribute = planeGeometry.attributes.position;
-const colors = []; // 存储顶点颜色
+       // 创建平滑起伏的地面
+       const planeSize = 100; // 平面大小
+        const planeSegments = 100; // 平面的分段数
+        const planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize, planeSegments, planeSegments);
 
-for (let i = 0; i < positionAttribute.count; i++) {
-    const x = positionAttribute.getX(i);
-    const y = positionAttribute.getY(i);
-    const z = positionAttribute.getZ(i);
+        // 使用 Simplex Noise 生成高度
+        const noise = new SimplexNoise();
+        const positionAttribute = planeGeometry.attributes.position;
+        const colors = []; // 存储顶点颜色
 
-    // 设置随机高度（起伏效果）
-    const height = Math.random() * 2; // 随机高度范围
-    positionAttribute.setZ(i, height);
+        for (let i = 0; i < positionAttribute.count; i++) {
+            const x = positionAttribute.getX(i);
+            const y = positionAttribute.getY(i);
 
-    // 根据高度设置颜色
-    const color = new THREE.Color();
-    if (height < 0.5) {
-        color.set(0x00ff00); // 低处为绿色
-    } else if (height < 1) {
-        color.set(0xffff00); // 中等高度为黄色
-    } else {
-        color.set(0xff0000); // 高处为红色
-    }
+            // 生成噪声值（平滑起伏）
+            const scale = 0.1; // 控制噪声的缩放
+            const height = noise.noise2D(x * scale, y * scale) * 2; // 控制起伏高度
 
-    // 将颜色添加到数组
-    colors.push(color.r, color.g, color.b);
-}
+            // 让绝大部分区域是平整的
+            if (Math.abs(height) < 0.5) {
+                positionAttribute.setZ(i, 0); // 平坦区域
+            } else {
+                positionAttribute.setZ(i, height); // 起伏区域
+            }
 
-// 将颜色数据赋值给几何体的 color 属性
-planeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            // 根据高度设置顶点颜色
+            const color = new THREE.Color();
+            if (height < 0) {
+                color.set(0x333333); // 低处为蓝色
+            } else if (height < 1) {
+                color.set(0x999999); // 中等高度为绿色
+            } else {
+                color.set(0xcccccc); // 高处为红色
+            }
 
-// 更新几何体以应用修改
-planeGeometry.attributes.position.needsUpdate = true;
-planeGeometry.computeVertexNormals(); // 重新计算法线，确保光照效果正确
+            // 将颜色添加到数组
+            colors.push(color.r, color.g, color.b);
+        }
 
-// 创建材质
-const planeMaterial = new THREE.MeshPhongMaterial({
-    vertexColors: true, // 启用顶点颜色
-    side: THREE.DoubleSide,
-    flatShading: true // 使用平面着色，增强起伏效果
-});
+        // 将颜色数据赋值给几何体的 color 属性
+        planeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-// 创建网格
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-plane.rotation.x = -Math.PI / 2; // 旋转平面使其水平
-scene.add(plane);
+        // 更新几何体
+        planeGeometry.attributes.position.needsUpdate = true;
+        planeGeometry.computeVertexNormals();
 
+        // 创建材质（使用顶点颜色）
+        const planeMaterial = new THREE.MeshPhongMaterial({
+            vertexColors: true, // 启用顶点颜色
+            side: THREE.DoubleSide,
+            flatShading: true // 使用平面着色，增强起伏效果
+        });
+
+        // 创建网格
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = -Math.PI / 2; // 旋转平面使其水平
+        scene.add(plane);
+
+
+         // 创建灰色平面
+         const grayPlaneGeometry = new THREE.PlaneGeometry(planeSize, planeSize); // 使用与起伏地面相同的大小
+            const grayPlaneMaterial = new THREE.MeshPhongMaterial({
+                color: 0x808080, // 灰色
+                side: THREE.DoubleSide
+            });
+            const grayPlane = new THREE.Mesh(grayPlaneGeometry, grayPlaneMaterial);
+            grayPlane.rotation.x = -Math.PI / 2; // 旋转平面使其水平
+            grayPlane.position.y = -0.01; // 设置平面高度为 -1
+            scene.add(grayPlane);
 
 
         // 立方体（模拟人）
@@ -181,6 +201,23 @@ scene.add(plane);
           };
         });
 
+        // 跳跃相关变量
+        let isJumping = false; // 是否正在跳跃
+        let jumpHeight = 0; // 当前跳跃高度
+        // 初始速度
+        const defaultSpeed = 0.6; // 初始速度
+        let jumpSpeed = defaultSpeed; // 跳跃速度
+        
+        const gravity = 0.02; // 重力
+
+        // 监听空格键按下事件
+        window.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' && !isJumping) { // 按下空格键且未在跳跃
+                isJumping = true;
+                jumpHeight = 0; // 重置跳跃高度
+            }
+        });
+
         // 动画循环
         function animate() {
             requestAnimationFrame(animate);
@@ -205,6 +242,26 @@ scene.add(plane);
             if (keys.d) {
                 const rightDirection = new THREE.Vector3().crossVectors(direction, new THREE.Vector3(0, 1, 0)); // 计算右方向
                 cube.position.addScaledVector(rightDirection, moveSpeed); // 向右移动
+            }
+
+            // 跳跃逻辑
+            if (isJumping) {
+                jumpHeight += jumpSpeed; // 增加跳跃高度
+                cube.position.y += jumpSpeed; // 更新立方体的 y 坐标
+
+                // 达到最高点后开始下落
+                if (jumpHeight > 20) { // 跳跃高度限制
+                    jumpSpeed -= gravity; // 应用重力，速度逐渐减小
+                } else {
+                    jumpSpeed -= gravity; // 上升阶段也应用重力
+                }
+
+                // 落地后停止跳跃
+                if (cube.position.y <= 1) { // 地面高度为 1
+                    cube.position.y = 1; // 确保立方体在地面上
+                    isJumping = false;
+                    jumpSpeed = defaultSpeed; // 重置跳跃速度
+                }
             }
 
             // 更新相机位置
